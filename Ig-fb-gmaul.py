@@ -18,7 +18,7 @@ def banner():
     BRUTE_NIHAL  - EDUCATIONAL LOGIN ATTACK TOOL
     Author.      : NIHAL-THE-HACKER
     Version.     : 1.4
-    
+    Masseg.      : stay erlthical
     LEGAL DISCLAIMER:
     Only use this script against systems you have permission to test.
     
