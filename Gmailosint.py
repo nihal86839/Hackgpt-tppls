@@ -1,59 +1,71 @@
 #!/usr/bin/env python3
 """
-OSINT Email Validation and Analysis Demo - Educational Tool Only
+Educational Demo: Gmail Privacy Analysis - Demonstrates privacy risks without actual access.
 """
 
-def validate_email(email):
-    """Show basic email format validation."""
+def analyze_gmail(email):
+    """Demonstrate how basic OSINT works against email addresses."""
     
-    if not "@" in email:
-        print("[INVALID] Missing '@' symbol")
-        return False
+    print(f"\n===== Analyzing: {email} =====")
+    
+    # Educational demonstration of data collection techniques
+    
+    # Username extraction
+    if "@" in email:
+        username = email.split("@")[0]
+        print(f"[USERNAME] Extracted primary handle:", username)
         
-    local_part, domain = email.split("@", 1)
-    
-    # Basic checks for educational purposes only
-    if len(local_part) > 64: 
-        print("Local part too long (>64 chars)")
+        # Potential for typosquatting research
+        common_typos = [
+            username.replace("l", "1"),
+            username.replace("o", "0"),
+            username + "_",
+            username.capitalize(),
+            f"{username}2"
+        ]
         
-    if not local_part.isalnum() and "@" in email:
-        print("[WARNING] Unusual character sequences")
+        print("[POTENTIAL] Typosquatting variations:", common_typos)
     
-    domain_parts = [d.strip('-.') for d in domain.split('.') if d.strip('.')]
-    if len(domain_parts) < 2:  
-        print("Domain looks suspicious (too short)")
+    # Domain analysis
+    if "@" in email:
+        domain = email.split("@")[1]
+        print(f"[DOMAIN] Service provider:", domain)
         
-    # Ethically demonstrate how attackers might test
-    common_tlds = ['com', 'org', 'net', 'edu']
-    for ext in common_tlds:
-        if domain.endswith(ext):
-            try:
-                # This is just demonstration - real checks would use network tools
-                with open(f"{local_part}@{domain.replace('.', '_')}.txt", "w") as f:
-                    pass  # Educational placeholder
-            except FileNotFoundError:
-                print("Creating file demo...")
+        # Check for subdomain patterns
+        parts = domain.split('.')
+        if len(parts) > 2 and not any(p.isdigit() for p in parts[0]):
+            print("[PATTERN] Possible organizational structure:", 
+                  f"{parts[0]}.{parts[-1]}")
     
-    return True
+    # Educational phishing vector analysis
+    
+    def analyze_patterns(s):
+        """Educate on common search patterns."""
+        if len(s) > 64:
+            return "[WARNING] Very long name (>63 chars)"
+        
+        special_chars = sum(1 for c in s if not c.isalnum())
+        if special_chars > 2:
+            print(f"[PATTERN] Excessive special characters: {s}")
+            
+        numeric_ratio = sum(c.isdigit() for c in s) / len(s)
+        if numeric_ratio > .3:
+            return "[PATTERN] High numeric ratio"
+    
+    # Apply to username
+    try:
+        analyze_patterns(username)
+    except NameError:
+        pass
+    
+    print("[EDUCATIONAL] Attack vectors demonstrated.")
 
 def main():
-    print("""
-[Educational Demonstration] Email Validation Tool
-   
-This script shows basic email structure validation.
-""")
+    email = input("Enter an email address for analysis: ")
+    if not email.endswith(('.com', '.edu', '.gov')):
+        print("[NOTE] Non-commercial domains detected")
     
-    while True:
-        email = input("Enter an email address to validate: ")
-        
-        if not email.lower().endswith(('.edu', '.gov', '.mil')):
-            print("[NOTE] Non-educational domains detected")
-            
-        validate_email(email)
-        
-        again = input("\nValidate another? (y/n): ")
-        if again.lower() != 'y':
-            break
+    analyze_gmail(email)
 
 if __name__ == "__main__":
     main()
